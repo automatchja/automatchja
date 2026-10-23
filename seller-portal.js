@@ -3,13 +3,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const config = window.AUTOMATCH_SUPABASE_CONFIG;
 const notice = document.getElementById('notice');
 const loginView = document.getElementById('loginView');
+const passwordResetView = document.getElementById('passwordResetView');
+const passwordSetupView = document.getElementById('passwordSetupView');
 const dashboardView = document.getElementById('dashboardView');
 const signOutButton = document.getElementById('signOut');
 const statusOptions = ['draft', 'published', 'sold', 'archived'];
+const authFlow = new URLSearchParams(window.location.hash.slice(1)).get('type');
+const needsPasswordSetup = authFlow === 'invite' || authFlow === 'recovery';
 let supabase;
 let sellers = [];
 let activeSellerId = '';
 let vehicleById = new Map();
+let isSettingPassword = false;
 
 function showNotice(message, kind = 'error') {
   notice.textContent = message;
@@ -299,6 +304,69 @@ document.getElementById('loginForm').addEventListener('submit', async event => {
   }
 });
 
+document.getElementById('showPasswordReset').addEventListener('click', () => {
+  clearNotice();
+  passwordResetView.classList.remove('hidden');
+  loginView.classList.add('hidden');
+  const loginEmail = document.getElementById('email').value.trim();
+  document.getElementById('resetEmail').value = loginEmail;
+  document.getElementById('resetEmail').focus();
+});
+
+document.getElementById('backToLogin').addEventListener('click', () => {
+  clearNotice();
+  passwordResetView.classList.add('hidden');
+  loginView.classList.remove('hidden');
+});
+
+document.getElementById('passwordResetForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  clearNotice();
+  const form = new FormData(event.currentTarget);
+  const email = String(form.get('email')).trim();
+  const button = document.getElementById('sendPasswordReset');
+  setBusy(button, true, 'Sending link...');
+
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}${window.location.pathname}`
+    });
+    if (error) throw new Error(error.message);
+    showNotice('If that email has an AutoMatch account, a password link will arrive shortly. Check your inbox and spam folder.', 'success');
+  } catch (error) {
+    showNotice(`Could not send a password link: ${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+});
+
+document.getElementById('passwordSetupForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  clearNotice();
+  const form = new FormData(event.currentTarget);
+  const password = String(form.get('password'));
+  const confirmPassword = String(form.get('confirmPassword'));
+  if (password !== confirmPassword) {
+    showNotice('The passwords do not match.');
+    return;
+  }
+
+  const button = document.getElementById('savePassword');
+  setBusy(button, true, 'Saving password...');
+  try {
+    const { data, error } = await supabase.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+    isSettingPassword = false;
+    passwordSetupView.classList.add('hidden');
+    await loadWorkspace(data.user);
+    showNotice('Password set. Your account is ready.', 'success');
+  } catch (error) {
+    showNotice(`Could not set password: ${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+});
+
 document.getElementById('sellerPicker').addEventListener('change', async event => {
   activeSellerId = event.currentTarget.value;
   try {
@@ -388,18 +456,33 @@ async function start() {
   }
 
   if (data.session) {
-    try {
-      await loadWorkspace(data.session.user);
-    } catch (workspaceError) {
-      showNotice(workspaceError.message);
+    if (needsPasswordSetup) {
+      passwordSetupView.classList.remove('hidden');
+      isSettingPassword = true;
+      document.getElementById('newPassword').focus();
+    } else {
+      try {
+        await loadWorkspace(data.session.user);
+      } catch (workspaceError) {
+        showNotice(workspaceError.message);
+      }
     }
   }
 
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT' || !session) {
       loginView.classList.remove('hidden');
+      passwordSetupView.classList.add('hidden');
       dashboardView.classList.add('hidden');
       signOutButton.classList.add('hidden');
+    }
+
+    if (event === 'PASSWORD_RECOVERY') {
+      isSettingPassword = true;
+      loginView.classList.add('hidden');
+      dashboardView.classList.add('hidden');
+      passwordSetupView.classList.remove('hidden');
+      document.getElementById('newPassword').focus();
     }
   });
 }

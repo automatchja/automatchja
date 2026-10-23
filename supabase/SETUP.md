@@ -12,11 +12,17 @@ In **SQL Editor**, run
 
 ## 2. Create Allan's account
 
+Set the Supabase Auth **Site URL** to the current hosted website address (or
+`http://localhost:3000` while testing locally) and add the exact seller portal
+URL to **Redirect URLs** (for local testing, `http://localhost:3000/seller.html`).
+A custom domain can replace these later.
+
 In **Authentication → Users**, invite Allan's email address. Public sign-ups
 should remain disabled; accounts should be invited by an administrator.
 The database trigger creates a non-privileged profile for each new auth user.
-Set the Supabase Auth **Site URL** to the current hosted website address (or a
-local development address while testing). A custom domain can replace it later.
+Open the invite link and set a password on the seller portal before signing in.
+If the invite link expires or you have not set a password, use **Set or reset
+password** on the sign-in page to request a fresh password link.
 
 In SQL Editor, promote that profile to master, replacing the placeholder email:
 
@@ -51,6 +57,9 @@ directly. Sign in with the invited account.
 - Only published stock from active sellers is publicly readable. Drafts and
   leads are not public.
 - The portal can create and publish inventory and review/update leads.
+- Invite and password-recovery links return to the seller portal, where the user
+  can set a password before continuing. Password reset emails are sent by
+  Supabase Auth and may require a configured SMTP provider outside development.
 - Lead creation is intentionally restricted to the Supabase service role. A
   trusted submission endpoint with spam/rate-limit protections must be added
   before moving public lead submissions from Apps Script into Supabase.

@@ -32,6 +32,32 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         <button id="signIn" class="button primary" type="submit">Sign in</button>
       </form>
+      <button id="showPasswordReset" class="text-button" type="button">Set or reset password</button>
+    </section>
+
+    <section id="passwordResetView" class="auth-card hidden">
+      <p class="eyebrow">Password help</p>
+      <h1>Set your password.</h1>
+      <p class="muted">Enter the email address you were invited with. We’ll send a secure link to choose a password.</p>
+      <form id="passwordResetForm">
+        <label for="resetEmail">Invited email</label>
+        <input id="resetEmail" name="email" type="email" autocomplete="email" required>
+        <button id="sendPasswordReset" class="button primary" type="submit">Email me a password link</button>
+      </form>
+      <button id="backToLogin" class="text-button" type="button">Back to sign in</button>
+    </section>
+
+    <section id="passwordSetupView" class="auth-card hidden">
+      <p class="eyebrow">Finish account setup</p>
+      <h1>Create your password.</h1>
+      <p class="muted">Choose a password for your AutoMatch seller account.</p>
+      <form id="passwordSetupForm">
+        <label for="newPassword">New password</label>
+        <input id="newPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="confirmPassword">Confirm password</label>
+        <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+        <button id="savePassword" class="button primary" type="submit">Set password</button>
+      </form>
     </section>
 
     <section id="dashboardView" class="hidden">

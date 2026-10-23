@@ -1,4 +1,4 @@
 window.AUTOMATCH_SUPABASE_CONFIG = {
-  url: 'https://YOUR_PROJECT_ID.supabase.co',
-  anonKey: 'YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY'
+  url: 'https://hvfdwqzfgghzpzyemraf.supabase.co',
+  anonKey: 'sb_publishable_8ZMlTNDuLb5cxwTyhWqsOQ_UkmFPjt3'
 };

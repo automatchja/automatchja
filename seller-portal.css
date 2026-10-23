@@ -24,6 +24,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid #ff8195;outline-
 .button{min-height:43px;border:1px solid var(--line);border-radius:11px;padding:10px 15px;color:var(--text);font-weight:800}
 .button.primary{border:0;background:linear-gradient(145deg,#e31937,#a50825)}
 .button.quiet{background:rgba(255,255,255,.04)}
+.text-button{display:block;margin:17px auto 0;padding:7px;border:0;background:transparent;color:#ff9aaa;font-size:13px;font-weight:800}
 #loginForm .button{margin-top:8px}
 .notice{margin:0 0 18px;padding:12px 15px;border:1px solid rgba(227,25,55,.35);border-radius:12px;background:rgba(200,16,46,.12);color:#ffd9df}
 .notice.success{border-color:rgba(69,213,154,.35);background:rgba(69,213,154,.09);color:#b9f2d9}

@@ -128,7 +128,7 @@ create policy "Active sellers are publicly visible"
   using (status = 'active');
 create policy "Members and master can read their sellers"
   on public.sellers for select to authenticated
-  using (select public.has_seller_access(id));
+  using ((select public.has_seller_access(id)));
 create policy "Master can create sellers"
   on public.sellers for insert to authenticated
   with check ((select public.is_master_admin()));
