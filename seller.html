@@ -79,10 +79,37 @@
         <article class="stat-card"><span>Requests</span><strong id="leadCount">0</strong></article>
       </div>
 
+      <section id="workspaceAccess" class="content-card hidden">
+        <div class="section-heading">
+          <div><p class="eyebrow">Master approval</p><h2>Workspace access</h2></div>
+        </div>
+        <p class="muted">Only assign access after inviting that person to AutoMatch. Sellers can’t add themselves to a workspace.</p>
+        <form id="membershipForm" class="membership-form">
+          <label>Invited user's email<input name="email" type="email" autocomplete="off" required></label>
+          <label>Access level
+            <select name="role">
+              <option value="seller_admin">Seller admin</option>
+              <option value="seller_staff">Seller staff</option>
+            </select>
+          </label>
+          <button id="assignMembership" class="button primary" type="submit">Approve access</button>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Account</th><th>Access</th><th>Membership</th><th></th></tr></thead>
+            <tbody id="membershipRows"></tbody>
+          </table>
+          <p id="membersEmpty" class="empty hidden">No accounts have access to this workspace yet.</p>
+        </div>
+      </section>
+
       <section class="content-card">
         <div class="section-heading">
           <div><p class="eyebrow">Stock</p><h2>Inventory</h2></div>
-          <button id="showVehicleForm" class="button primary" type="button">Add vehicle</button>
+          <div class="section-actions">
+            <button id="importExistingInventory" class="button quiet hidden" type="button">Import existing ATL stock</button>
+            <button id="showVehicleForm" class="button primary" type="button">Add vehicle</button>
+          </div>
         </div>
         <form id="vehicleForm" class="vehicle-form hidden">
           <label>Year<input name="year" type="number" min="1886" max="2100" required></label>

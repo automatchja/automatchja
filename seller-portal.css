@@ -37,9 +37,14 @@ input:focus,select:focus,button:focus-visible{outline:2px solid #ff8195;outline-
 .stat-card strong{display:block;margin-top:5px;font-size:28px}
 .content-card{margin-top:18px;padding:22px}
 .section-heading{margin-bottom:18px}
+.section-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px}
 .vehicle-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:16px;margin:0 0 18px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025)}
 .vehicle-form label{font-size:12px}
 .vehicle-form .button{align-self:end}
+.membership-form{display:grid;grid-template-columns:minmax(220px,2fr) minmax(170px,1fr) auto;align-items:end;gap:12px;margin:18px 0}
+.membership-form label{font-size:12px}
+.membership-form .button{white-space:nowrap}
+.remove-membership{min-height:34px;padding:7px 10px;border:1px solid rgba(227,25,55,.35);border-radius:9px;background:rgba(200,16,46,.1);color:#ffd9df;font-size:12px;font-weight:800}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;text-align:left}
 th,td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -48,5 +53,5 @@ td{font-size:13px}
 td select{min-width:125px;padding:8px}
 .empty{padding:18px 0 4px;color:var(--muted)}
 .status-draft{color:#ffd487}.status-published{color:var(--green)}.status-sold{color:#d2b6ff}.status-archived,.status-closed{color:var(--muted)}.status-new{color:#ff9ba9}.status-contacted{color:#9bcaff}
-@media(max-width:680px){.shell{width:min(100% - 22px,1120px);padding-top:12px}.auth-card{padding:23px}.welcome{align-items:stretch;flex-direction:column}.seller-picker{width:100%}.stats{gap:8px}.stat-card{padding:14px 11px}.stat-card strong{font-size:23px}.content-card{padding:16px}.vehicle-form{grid-template-columns:1fr 1fr}.section-heading{align-items:flex-start}.section-heading h2{font-size:21px}}
-@media(max-width:390px){.vehicle-form{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.stat-card:last-child{grid-column:span 2}}
+@media(max-width:680px){.shell{width:min(100% - 22px,1120px);padding-top:12px}.auth-card{padding:23px}.welcome{align-items:stretch;flex-direction:column}.seller-picker{width:100%}.stats{gap:8px}.stat-card{padding:14px 11px}.stat-card strong{font-size:23px}.content-card{padding:16px}.vehicle-form,.membership-form{grid-template-columns:1fr 1fr}.membership-form .button{grid-column:1/-1}.section-heading{align-items:flex-start}.section-heading h2{font-size:21px}.section-actions{flex-direction:column}.section-actions .button{width:100%}}
+@media(max-width:390px){.vehicle-form,.membership-form{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.stat-card:last-child{grid-column:span 2}}

@@ -8,13 +8,17 @@ const passwordSetupView = document.getElementById('passwordSetupView');
 const dashboardView = document.getElementById('dashboardView');
 const signOutButton = document.getElementById('signOut');
 const statusOptions = ['draft', 'published', 'sold', 'archived'];
-const authFlow = new URLSearchParams(window.location.hash.slice(1)).get('type');
+const LEGACY_INVENTORY_API_URL = 'https://script.google.com/macros/s/AKfycbz2UAL-otaXKaDTHIzemtoto-5ZLsxZP4y-f0i40wB5WabQImIE_E1UdaXn-RhS1yjrjA/exec';
+const authCallback = new URLSearchParams(window.location.hash.slice(1));
+const authFlow = authCallback.get('type');
 const needsPasswordSetup = authFlow === 'invite' || authFlow === 'recovery';
+const authCallbackError = authCallback.get('error_code') || authCallback.get('error');
 let supabase;
 let sellers = [];
 let activeSellerId = '';
 let vehicleById = new Map();
 let isSettingPassword = false;
+let isMasterUser = false;
 
 function showNotice(message, kind = 'error') {
   notice.textContent = message;
@@ -24,6 +28,31 @@ function showNotice(message, kind = 'error') {
 function clearNotice() {
   notice.textContent = '';
   notice.className = 'notice hidden';
+}
+
+function showLogin() {
+  loginView.classList.remove('hidden');
+  passwordResetView.classList.add('hidden');
+  passwordSetupView.classList.add('hidden');
+  dashboardView.classList.add('hidden');
+  signOutButton.classList.add('hidden');
+}
+
+function showPasswordReset(message) {
+  showLogin();
+  loginView.classList.add('hidden');
+  passwordResetView.classList.remove('hidden');
+  if (message) showNotice(message);
+  document.getElementById('resetEmail').focus();
+}
+
+function showPasswordSetup() {
+  loginView.classList.add('hidden');
+  passwordResetView.classList.add('hidden');
+  dashboardView.classList.add('hidden');
+  passwordSetupView.classList.remove('hidden');
+  signOutButton.classList.add('hidden');
+  document.getElementById('newPassword').focus();
 }
 
 function escapeHtml(value) {
@@ -69,6 +98,7 @@ async function loadWorkspace(user) {
     .single();
 
   if (profileError) throw new Error(`Could not load account access: ${profileError.message}`);
+  isMasterUser = profile.role === 'master';
 
   const { data: sellerRows, error: sellerError } = await supabase
     .from('sellers')
@@ -106,6 +136,7 @@ async function loadWorkspace(user) {
 
   document.querySelector('.stats').classList.remove('hidden');
   document.querySelectorAll('.content-card').forEach(section => section.classList.remove('hidden'));
+  document.getElementById('workspaceAccess').classList.toggle('hidden', !isMasterUser);
   const picker = document.getElementById('sellerPicker');
   picker.disabled = false;
   picker.innerHTML = sellers.map(seller =>
@@ -117,6 +148,7 @@ async function loadWorkspace(user) {
     ? activeSellerId
     : (preferredSeller || sellers[0]).id;
   picker.value = activeSellerId;
+  updateInventoryImportVisibility();
 
   document.getElementById('welcomeTitle').textContent =
     `Welcome, ${user.email || 'seller'}`;
@@ -125,6 +157,7 @@ async function loadWorkspace(user) {
     : 'Seller access · This workspace is limited to your assigned business.';
 
   await loadSellerData();
+  if (isMasterUser) await loadSellerMembers();
   loginView.classList.add('hidden');
   dashboardView.classList.remove('hidden');
   signOutButton.classList.remove('hidden');
@@ -159,6 +192,173 @@ async function loadSellerData() {
   document.getElementById('leadCount').textContent = String(leads.length);
   renderInventory(inventory);
   renderLeads(leads);
+}
+
+function updateInventoryImportVisibility() {
+  const atlSeller = sellers.find(seller => seller.id === activeSellerId);
+  document.getElementById('importExistingInventory')
+    .classList.toggle('hidden', !isMasterUser || atlSeller?.slug !== 'atl-approved');
+}
+
+function legacyBootstrap() {
+  return new Promise((resolve, reject) => {
+    const callback = `__automatchImport_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      delete window[callback];
+      script.remove();
+      reject(new Error('The existing inventory feed took too long to respond.'));
+    }, 30000);
+    const cleanup = () => {
+      clearTimeout(timer);
+      delete window[callback];
+      script.remove();
+    };
+
+    window[callback] = data => {
+      cleanup();
+      if (!data || data.ok === false) {
+        reject(new Error(data?.error || 'The existing inventory feed returned an invalid response.'));
+        return;
+      }
+      resolve(data);
+    };
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Could not connect to the existing inventory feed.'));
+    };
+    const query = new URLSearchParams({ action: 'bootstrap', callback });
+    script.src = `${LEGACY_INVENTORY_API_URL}?${query.toString()}`;
+    document.head.append(script);
+  });
+}
+
+function mapLegacyVehicle(vehicle) {
+  if (!vehicle.id || !vehicle.make || !vehicle.model ||
+      !Number.isInteger(Number(vehicle.year)) ||
+      !Number.isFinite(Number(vehicle.price)) ||
+      !Number.isFinite(Number(vehicle.mileage))) {
+    throw new Error(`Vehicle ${vehicle.id || '(missing ID)'} has incomplete listing data; nothing was imported.`);
+  }
+
+  return {
+    seller_id: activeSellerId,
+    source_id: String(vehicle.id),
+    year: Number(vehicle.year),
+    make: String(vehicle.make).trim(),
+    model: String(vehicle.model).trim(),
+    price_jmd: Number(vehicle.price),
+    mileage_km: Number(vehicle.mileage),
+    body_type: String(vehicle.bodyType || ''),
+    colour: String(vehicle.colour || ''),
+    status: 'published',
+    usage_tags: Array.isArray(vehicle.usageTags) ? vehicle.usageTags.map(String) : [],
+    images: Array.isArray(vehicle.images) ? vehicle.images.map(String) : [],
+    image_folder_id: String(vehicle.imageFolderId || ''),
+    deal: vehicle.deal && typeof vehicle.deal === 'object' ? vehicle.deal : {},
+    source_data: vehicle
+  };
+}
+
+async function importExistingInventory(button) {
+  if (!isMasterUser || !sellers.some(seller =>
+    seller.id === activeSellerId && seller.slug === 'atl-approved'
+  )) {
+    showNotice('Only a master can import stock into the ATL Approved workspace.');
+    return;
+  }
+  if (!window.confirm('Import all currently available ATL Approved vehicles into Supabase as published listings? Existing imported rows will be left unchanged.')) {
+    return;
+  }
+
+  setBusy(button, true, 'Loading existing stock...');
+  clearNotice();
+  try {
+    const bootstrap = await legacyBootstrap();
+    const availableVehicles = (Array.isArray(bootstrap.vehicles) ? bootstrap.vehicles : [])
+      .filter(vehicle => String(vehicle.status || '').trim().toLowerCase() === 'available');
+    if (!availableVehicles.length) {
+      throw new Error('The existing feed returned no available vehicles, so nothing was imported.');
+    }
+    const rows = availableVehicles.map(mapLegacyVehicle);
+    const ids = rows.map(row => row.source_id);
+    if (new Set(ids).size !== ids.length) {
+      throw new Error('The existing feed contains duplicate vehicle IDs; nothing was imported.');
+    }
+
+    const { data: existingSources, error: existingError } = await supabase
+      .from('inventory')
+      .select('source_id')
+      .eq('seller_id', activeSellerId)
+      .not('source_id', 'is', null);
+    if (existingError) throw new Error(`Could not check for previously imported stock: ${existingError.message}`);
+
+    const existingIds = new Set((existingSources || []).map(row => row.source_id));
+    const newRows = rows.filter(row => !existingIds.has(row.source_id));
+    if (newRows.length) {
+      const { error } = await supabase.from('inventory').upsert(newRows, {
+        onConflict: 'seller_id,source_id',
+        ignoreDuplicates: true
+      });
+      if (error) throw new Error(`Could not import existing stock: ${error.message}`);
+    }
+
+    await loadSellerData();
+    showNotice(
+      newRows.length
+        ? `Imported ${newRows.length} ATL Approved vehicles. ${rows.length - newRows.length} previously imported vehicles were left unchanged.`
+        : `All ${rows.length} available ATL Approved vehicles were already imported; no changes were made.`,
+      'success'
+    );
+  } catch (error) {
+    showNotice(`Inventory import failed: ${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function loadSellerMembers() {
+  const { data, error } = await supabase.rpc('master_list_seller_members', {
+    target_seller_id: activeSellerId
+  });
+  if (error) throw new Error(`Could not load workspace members: ${error.message}`);
+
+  const members = data || [];
+  const rows = document.getElementById('membershipRows');
+  document.getElementById('membersEmpty').classList.toggle('hidden', members.length > 0);
+  rows.innerHTML = members.map(member => `
+    <tr>
+      <td>${escapeHtml(member.email)}</td>
+      <td>${member.role === 'seller_admin' ? 'Seller admin' : 'Seller staff'}</td>
+      <td>${member.is_active ? 'Active' : 'Revoked'}</td>
+      <td>${member.is_active
+        ? `<button class="remove-membership" type="button" data-member-id="${escapeHtml(member.user_id)}" data-member-email="${escapeHtml(member.email)}">Revoke</button>`
+        : ''}</td>
+    </tr>
+  `).join('');
+
+  rows.querySelectorAll('[data-member-id]').forEach(button => {
+    button.addEventListener('click', () => changeMembership(button, false));
+  });
+}
+
+async function changeMembership(button, isActive) {
+  button.disabled = true;
+  try {
+    const { error } = await supabase.rpc('master_set_seller_membership', {
+      member_email: button.dataset.memberEmail || '',
+      target_seller_id: activeSellerId,
+      membership_role: 'seller_staff',
+      membership_active: isActive
+    });
+    if (error) throw new Error(error.message);
+    await loadSellerMembers();
+    showNotice(isActive ? 'Workspace access approved.' : 'Workspace access revoked.', 'success');
+  } catch (error) {
+    showNotice(`Could not update workspace access: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderInventory(inventory) {
@@ -369,10 +569,40 @@ document.getElementById('passwordSetupForm').addEventListener('submit', async ev
 
 document.getElementById('sellerPicker').addEventListener('change', async event => {
   activeSellerId = event.currentTarget.value;
+  updateInventoryImportVisibility();
   try {
     await loadSellerData();
+    if (isMasterUser) await loadSellerMembers();
   } catch (error) {
     showNotice(error.message);
+  }
+});
+
+document.getElementById('importExistingInventory')
+  .addEventListener('click', event => importExistingInventory(event.currentTarget));
+
+document.getElementById('membershipForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  clearNotice();
+  const form = new FormData(event.currentTarget);
+  const button = document.getElementById('assignMembership');
+  setBusy(button, true, 'Approving...');
+
+  try {
+    const { error } = await supabase.rpc('master_set_seller_membership', {
+      member_email: String(form.get('email')).trim(),
+      target_seller_id: activeSellerId,
+      membership_role: String(form.get('role')),
+      membership_active: true
+    });
+    if (error) throw new Error(error.message);
+    event.currentTarget.reset();
+    await loadSellerMembers();
+    showNotice('Workspace access approved for this account.', 'success');
+  } catch (error) {
+    showNotice(`Could not approve workspace access: ${error.message}`);
+  } finally {
+    setBusy(button, false);
   }
 });
 
@@ -449,17 +679,35 @@ async function start() {
   }
 
   supabase = createClient(config.url, config.anonKey);
+  supabase.auth.onAuthStateChange(event => {
+    if (event === 'SIGNED_OUT') {
+      showLogin();
+      clearNotice();
+    } else if (event === 'PASSWORD_RECOVERY') {
+      isSettingPassword = true;
+      showPasswordSetup();
+    }
+  });
+
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     showNotice(`Could not restore your session: ${error.message}`);
     return;
   }
 
+  if (authCallbackError) {
+    const message = authCallbackError === 'otp_expired'
+      ? 'That password link has expired or was already used. Request a fresh link below, then open the newest email.'
+      : 'That authentication link could not be verified. Request a fresh password link below.';
+    showPasswordReset(message);
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    return;
+  }
+
   if (data.session) {
     if (needsPasswordSetup) {
-      passwordSetupView.classList.remove('hidden');
       isSettingPassword = true;
-      document.getElementById('newPassword').focus();
+      showPasswordSetup();
     } else {
       try {
         await loadWorkspace(data.session.user);
@@ -469,22 +717,9 @@ async function start() {
     }
   }
 
-  supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT' || !session) {
-      loginView.classList.remove('hidden');
-      passwordSetupView.classList.add('hidden');
-      dashboardView.classList.add('hidden');
-      signOutButton.classList.add('hidden');
-    }
-
-    if (event === 'PASSWORD_RECOVERY') {
-      isSettingPassword = true;
-      loginView.classList.add('hidden');
-      dashboardView.classList.add('hidden');
-      passwordSetupView.classList.remove('hidden');
-      document.getElementById('newPassword').focus();
-    }
-  });
+  if (!data.session && needsPasswordSetup) {
+    showPasswordSetup();
+  }
 }
 
 start();

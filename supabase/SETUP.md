@@ -1,8 +1,8 @@
 # AutoMatch seller portal setup
 
-The existing public showroom remains unchanged while this portal is introduced.
-The migration creates the seller-scoped data model and access policies; it does
-not copy inventory or customer requests out of the current Google Apps Script.
+The public showroom reads published vehicle inventory from Supabase, with the
+existing Apps Script feed as a fallback. Customer requests, representative
+profiles, and other showroom content remain on Apps Script for now.
 
 ## 1. Create a Supabase project
 
@@ -34,11 +34,27 @@ where id = (
 );
 ```
 
-The migration seeds the ATL Approved seller. The master account can select
-ATL Approved or any other seller in the portal and manage that seller's
-inventory and requests.
+The migration seeds the ATL Approved seller. Run the additional migration
+[`migrations/20261023170000_master_membership_management.sql`](./migrations/20261023170000_master_membership_management.sql)
+to enable master-approved seller memberships. In the portal's **Workspace
+access** panel, a master can assign or revoke seller workspaces for invited
+accounts. Only assigned workspaces appear to seller users; the database
+rechecks membership on every protected query. The master account can select
+any seller workspace.
 
-## 3. Configure the static portal
+## 3. Import ATL Approved inventory
+
+Run
+[`migrations/20261023180000_inventory_import_fields.sql`](./migrations/20261023180000_inventory_import_fields.sql)
+in SQL Editor. While signed in as master, choose **ATL Approved** in the
+seller portal and select **Import existing ATL stock**. This copies currently
+available vehicles from the existing public Apps Script feed into Supabase as
+published stock. Source IDs make retries skip already imported rows; existing
+rows are not overwritten. This import does not change Google Sheets or lead
+data. Image-folder IDs and current image URLs are retained as metadata; image
+galleries continue using the existing Apps Script image endpoint.
+
+## 4. Configure the static portal
 
 Set the project's URL and its public publishable key (or legacy anon key) in
 `seller-config.js`, using the values from **Project Settings → API**. These
@@ -54,6 +70,11 @@ directly. Sign in with the invited account.
 - One account can hold master access and memberships in one or more sellers.
 - Seller membership is enforced in Postgres with row-level security; hiding a
   seller in the interface is not the security boundary.
+- A master must approve each seller account in **Workspace access**. Invite an
+  account first, then assign its exact email to the seller workspace.
+- The inventory import is a one-time copy from the existing public vehicle feed.
+  The public showroom prefers published Supabase inventory and falls back to
+  the existing feed if Supabase is unavailable. Leads remain on Apps Script.
 - Only published stock from active sellers is publicly readable. Drafts and
   leads are not public.
 - The portal can create and publish inventory and review/update leads.

@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>ATL Approved AutoMatch</title>
+<script src="seller-config.js"></script>
 <style>
 :root{--black:#0b0b0d;--panel:#1d1d21;--panel2:#29292f;--red:#c8102e;--red2:#e31937;--white:#fff;--muted:#a9a9b1;--border:rgba(255,255,255,.11);--green:#45d59a;--amber:#f4bd58;--shadow:0 22px 70px rgba(0,0,0,.34)}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;color:#fff;font-family:Inter,Arial,sans-serif;background:radial-gradient(circle at 8% 0%,rgba(200,16,46,.25),transparent 27%),linear-gradient(145deg,#09090b,#17171b 50%,#0d0d0f)}
@@ -835,6 +836,58 @@ function apiJsonp(action,params={}){
   });
 }
 
+async function fetchSupabaseInventory(){
+  const config=window.AUTOMATCH_SUPABASE_CONFIG;
+  if(!config||!config.url||!config.anonKey)throw new Error('Supabase is not configured.');
+
+  const headers={apikey:config.anonKey,Authorization:`Bearer ${config.anonKey}`};
+  const request=async path=>{
+    const response=await fetch(`${config.url.replace(/\/$/,'')}/rest/v1/${path}`,{
+      headers,
+      cache:'no-store'
+    });
+    if(!response.ok)throw new Error(`Supabase inventory request failed (${response.status}).`);
+    return response.json();
+  };
+
+  const sellers=await request('sellers?select=id&slug=eq.atl-approved&status=eq.active&limit=1');
+  if(!Array.isArray(sellers)||!sellers.length)throw new Error('ATL Approved is not active in Supabase.');
+
+  const query=new URLSearchParams({
+    select:'id,source_id,year,make,model,price_jmd,mileage_km,body_type,colour,status,usage_tags,images,image_folder_id,deal,source_data,dateAdded:created_at',
+    seller_id:`eq.${sellers[0].id}`,
+    status:'eq.published',
+    order:'created_at.desc'
+  });
+  const rows=await request(`inventory?${query.toString()}`);
+  if(!Array.isArray(rows))throw new Error('Supabase returned an invalid inventory response.');
+
+  return rows.map(row=>{
+    const source=row.source_data&&typeof row.source_data==='object'?row.source_data:{};
+    const deal=row.deal&&Object.keys(row.deal).length?row.deal:source.deal||{};
+    const images=Array.isArray(row.images)&&row.images.length?row.images:source.images||[];
+    const imageFolderId=row.image_folder_id||source.imageFolderId||'';
+    return{
+      ...source,
+      id:row.source_id||source.id||row.id,
+      year:row.year,
+      make:row.make,
+      model:row.model,
+      price:Number(row.price_jmd),
+      mileage:Number(row.mileage_km),
+      bodyType:row.body_type||source.bodyType||'',
+      colour:row.colour||source.colour||'',
+      status:'Available',
+      usageTags:Array.isArray(row.usage_tags)&&row.usage_tags.length?row.usage_tags:source.usageTags||[],
+      images,
+      imageFolderId,
+      hasImageFolder:Boolean(imageFolderId||source.hasImageFolder),
+      deal,
+      dateAdded:source.dateAdded||row.dateAdded
+    };
+  });
+}
+
 function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 
 function createClientRequestId(){
@@ -915,21 +968,35 @@ function saveBootstrapCache(data){
 
 function startAutoMatch(){
   const cached=readBootstrapCache();
-  const usedCache=Boolean(cached);
   if(cached)init(cached,{fromCache:true});
 
-  apiJsonp('bootstrap')
-    .then(data=>{
+  Promise.allSettled([
+    apiJsonp('bootstrap'),
+    fetchSupabaseInventory()
+  ])
+    .then(([bootstrapResult,inventoryResult])=>{
+      let data;
+      if(bootstrapResult.status==='fulfilled'){
+        data=bootstrapResult.value;
+      }else if(cached){
+        console.error('The existing storefront content feed could not refresh.',bootstrapResult.reason);
+        data=cached;
+      }else{
+        fail(bootstrapResult.reason);
+        return;
+      }
+
+      if(inventoryResult.status==='fulfilled'){
+        data={...data,vehicles:inventoryResult.value};
+        $('connectionBanner').classList.add('hidden');
+      }else{
+        console.error('Supabase inventory could not load; using the existing live inventory feed.',inventoryResult.reason);
+        $('connectionBanner').classList.remove('hidden');
+        $('connectionBanner').textContent='Using the existing live inventory while Supabase reconnects.';
+      }
       saveBootstrapCache(data);
       init(data,{fromCache:false});
     })
-    .catch(error=>{
-      if(!usedCache)fail(error);
-      else{
-        console.error(error);
-        toast('Showing recently saved inventory while the live refresh reconnects.');
-      }
-    });
 }
 
 startAutoMatch();
